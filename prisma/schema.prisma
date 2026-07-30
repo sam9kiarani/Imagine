@@ -1,0 +1,72 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  email String @unique
+  conversations Conversation[]
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+model Conversation {
+  id                 String    @id @default(uuid()) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title              String    @default("New Conversation")
+  
+  // Denormalization cache: ensures active layout modes load instantly without joins
+  lastGenerationMode String    @default("textToImage") @map("last_generation_mode")
+  
+  messages           Message[]
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  // Indexes optimize sorting the sidebar instantly by most recent activity
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(uuid()) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  role           String       // Enforced validation ('user' | 'assistant' | 'system') via application logic
+  content        String       @db.Text
+  isEdited       Boolean      @default(false) @map("is_edited")
+  
+  attachments    Attachment[]
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  // Index handles fast sequential generation scanning for a specific room thread
+  @@index([conversationId, createdAt(sort: Asc)])
+  @@map("messages")
+}
+
+model Attachment {
+  id             String   @id @default(uuid()) @db.Uuid
+  messageId      String   @map("message_id") @db.Uuid
+  message        Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  
+  storageUrl     String   @map("storage_url") @db.Text
+  fileName       String   @map("file_name")
+  fileSizeBytes  Int      @map("file_size_bytes")
+  mimeType       String   @map("mime_type")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([messageId])
+  @@map("attachments")
+}

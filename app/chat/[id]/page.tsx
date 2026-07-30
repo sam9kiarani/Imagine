@@ -1,3 +1,4 @@
+// image-gen/app/chat/[id]/page.tsx
 "use client";
 
 import { useParams } from "next/navigation";
@@ -34,6 +35,7 @@ export default function ConversationPage() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false); // Track server processing states
 
   useEffect(() => {
     setMessages(conversation.messages);
@@ -50,6 +52,53 @@ export default function ConversationPage() {
     const timeout = window.setTimeout(() => setCopiedIndex(null), 1500);
     return () => window.clearTimeout(timeout);
   }, [copiedIndex]);
+
+  // Combined callback handler to tie your data stream back into the conversation view
+  async function handleSendMessage(formData: FormData) {
+    const promptText = formData.get("prompt") as string;
+    if (!promptText) return;
+
+    setIsGenerating(true);
+
+    // 1. Immediately inject user message into UI state for an instant response feel
+    const newUserMessage: ChatMessageData = {
+      role: "user",
+      content: promptText,
+    };
+    
+    setMessages((current) => [...current, newUserMessage]);
+
+    // 2. Append route parameters if your backend needs to know which context thread this belongs to
+    formData.append("chatId", params.id);
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        body: formData, // Automatically transmits binary attachments & parameters
+      });
+
+      if (!response.ok) throw new Error("Generation error");
+
+      const result = await response.json();
+
+      // 3. Inject the server's reply directly into the message logs array 
+      if (result.success && result.reply) {
+        setMessages((current) => [
+          ...current,
+          { role: "assistant", content: result.reply },
+        ]);
+      }
+    } catch (error) {
+      console.error("Message generation pipeline failed:", error);
+      // Append an error message notice layout chunk so the user knows it failed
+      setMessages((current) => [
+        ...current,
+        { role: "assistant", content: "Sorry, I ran into an error processing that generation request." },
+      ]);
+    } finally {
+      setIsGenerating(false);
+    }
+  }
 
   async function copyMessage(index: number, content: string) {
     try {
@@ -129,6 +178,12 @@ export default function ConversationPage() {
               />
             ))
           )}
+          {/* Visual indicator loop when waiting for an backend engine reply */}
+          {isGenerating && (
+            <div className="chat-message assistant generating-indicator">
+              <p className="text-gray-400 italic">Thinking and processing asset generation request...</p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -137,6 +192,8 @@ export default function ConversationPage() {
         label="Message"
         attachmentLabel="Add Photos & Files"
         submitAriaLabel="Send message"
+        disabled={isGenerating} // Block double requests while a stream processes
+        onSubmit={handleSendMessage} // Mount pipeline handler
         submitContent={
           <Icon>
             <path d="m4 4 16 8-16 8 3-8-3-8Z" />

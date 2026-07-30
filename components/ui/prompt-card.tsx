@@ -6,6 +6,7 @@ type ImageAttachment = {
   id: string;
   name: string;
   previewUrl: string;
+  file: File; // Hold actual binary file data
 };
 
 type PromptCardProps = {
@@ -16,7 +17,7 @@ type PromptCardProps = {
   submitAriaLabel?: string;
   attachmentLabel?: string;
   disabled?: boolean;
-  onSubmit?: (data: { prompt: string }) => void;
+  onSubmit?: (data: FormData) => void;
 };
 
 export function PromptCard({
@@ -42,10 +43,12 @@ export function PromptCard({
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const selectedImages = Array.from(event.target.files ?? []).filter((file) => file.type.startsWith("image/"));
+    
     const newAttachments = selectedImages.map((file) => ({
       id: `${file.name}-${file.lastModified}-${crypto.randomUUID()}`,
       name: file.name,
       previewUrl: URL.createObjectURL(file),
+      file: file,
     }));
 
     setAttachments((current) => [...current, ...newAttachments]);
@@ -68,8 +71,21 @@ export function PromptCard({
       return;
     }
 
-    onSubmit?.({ prompt: trimmed });
+    //Payloader container
+    const formData = new FormData();
+    formData.append("prompt", trimmed);
+
+    //Append every attached image under the same array field key
+    attachments.forEach((attachment) => {
+      formData.append("images", attachment.file);
+    });
+
+    onSubmit?.(formData);
+
+    //Reset states after delivery
     setPrompt("");
+    attachments.forEach(({ previewUrl }) => URL.revokeObjectURL(previewUrl));
+    setAttachments([]);
   }
 
   return (

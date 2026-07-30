@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation"; 
 
 import { useButtonSelection } from "@/hooks/useButtonSelection";
 
@@ -9,7 +10,37 @@ import { Icon } from "@/helpers/icon";
 import { TopButtons } from "@/components/ui/top-buttons";
 
 export default function HomePage() {
-  const { currentButton, handleButtonChange } = useButtonSelection("textToImage")
+  const router = useRouter(); // Instantiate the router hook instance
+    const { currentButton, handleButtonChange } = useButtonSelection("textToImage");
+    const [isSubmitting, setIsSubmitting] = useState(false);
+  
+    const handlePromptSubmit = async (formData: FormData) => {
+      setIsSubmitting(true);
+      //Append the active button selection to the form data payload
+      formData.append("activeButton", currentButton);
+  
+      try {
+        const response = await fetch("/api/generate", {
+          method: "POST",
+          body: formData,
+        });
+  
+        if (!response.ok) {
+          throw new Error("Failed to generate image");
+        }
+  
+        const result = await response.json();
+        console.log("Image generation result:", result);
+  
+        //If the server returns a valid chat ID, redirect the user
+        if (result.success && result.chatId) {
+          router.push(`/chat/${result.chatId}`); // Redirect to the new chat page
+        }
+      } catch (error) {
+        console.error("Error generating image:", error);
+        setIsSubmitting(false); // Reset the submitting state on error
+      }
+    }
 
   return (
     <div className="page-wrap">
@@ -20,11 +51,19 @@ export default function HomePage() {
         </h1>
       </section>
       <TopButtons onSelectionChange={handleButtonChange}/>
-      <PromptCard inputId="image-prompt" label="Image prompt" placeholder="A glass greenhouse floating above a lavender field at sunset..." submitContent={
-        <Icon>
-          <path d="m4 4 16 8-16 8 3-8-3-8Z" />
-        </Icon>
-      } />
+      <PromptCard
+          inputId="chat-message"
+          label="Message"
+          placeholder="A glass greenhouse floating above a lavender field at sunset..."
+          attachmentLabel="Add Photos & Files"
+          submitAriaLabel="Send message"
+          onSubmit={handlePromptSubmit}
+          submitContent={
+            <Icon>
+              <path d="m4 4 16 8-16 8 3-8-3-8Z" />
+            </Icon>
+          }
+        />
 
       <section className="feature-row" aria-label="Image generation benefits">
         <article className="feature-card">
